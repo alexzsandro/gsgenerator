@@ -24,4 +24,8 @@ npm run check
 npm run test:e2e
 ```
 
-Fixture tata ibadah dan model harapan parser tersimpan di `src/fixtures`; pengujian browser juga membuat DOCX minimal di memori agar unggahan DOCX tervalidasi tanpa berkas pribadi.
+# Fixture tata ibadah dan model harapan parser tersimpan di `src/fixtures`; pengujian browser juga membuat DOCX minimal di memori agar unggahan DOCX tervalidasi tanpa berkas pribadi.
+
+# gsgenerator
+
+Turn your Docx into PPT
