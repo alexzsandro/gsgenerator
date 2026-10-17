@@ -9,6 +9,7 @@ export const slideSchema = z.object({
   text: z.string(),
   label: z.string().default(''),
   secondaryLabel: z.string().default(''),
+  songTitle: z.string().optional(),
   imageData: z.string().optional(),
 })
 

@@ -60,6 +60,7 @@ export function SlideEditor({ slide, index, total, onChange, onMove, onDuplicate
             <label><span>Label kanan</span><input value={slide.secondaryLabel} onChange={(event) => update('secondaryLabel', event.target.value)} placeholder="AYAT 1" /></label>
           </div>
         )}
+        {slide.kind === 'song-line' && slide.songTitle && <p className="song-source-title">Judul sumber: {slide.songTitle}</p>}
       </div>
     </article>
   )

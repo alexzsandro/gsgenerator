@@ -2,7 +2,8 @@ import { makeId, type Slide, type SourceBlock, type WorshipDocument, worshipDocu
 
 const MUSICAL_PREFIX = /^[♫♪\s]+/
 const SECTION_NAMES = /^(VOTUM|HUKUM TUHAN|DOA PENGAKUAN DOSA|PENGAKUAN IMAN|WARTA JEMAAT|ILU MANETEK|BERDOA|DOA PENUTUP|PELEPASAN|KOOR|E\s*P\s*I\s*S\s*T\s*E\s*L|EPISTEL|EVANGELIUM|KHOTBAH)/i
-const SONG_HEADING = /^(BERNYANYI|Bernyanyi)\b/i
+const SONG_MARKER = /\bBERNYANYI\b/i
+const SONG_REFERENCE = /\b(BN|BL)\.?\s*(?:No\.?\s*)?(\d+(?:\s*:\s*\d+(?:\s*(?:-|,)\s*\d+)*)?)/i
 const VERSE_START = /^(\d{1,3})\s*[.:]\s*(.+)$/
 const SPOKEN = /^(L|J|S)\s*:/i
 
@@ -26,15 +27,19 @@ const splitReadable = (text: string, maximum = 150): string[] => {
   return chunks
 }
 
-const songLabel = (heading: string): string => {
-  const match = heading.match(/\b(BN|BL)\s*(?:No\.?\s*)?(\d+(?:\s*:\s*[\d.\s-]+)?)/i)
-  if (!match) return 'BERNYANYI'
-  return `${match[1].toUpperCase()}. ${match[2].replace(/\s+/g, ' ').trim()}`
-}
+type SongMetadata = { label: string; title: string; verse: string; reference: 'BN' | 'BL' | '' }
 
-const verseLabel = (heading: string): string => {
-  const match = heading.match(/:\s*([\d]+(?:\s*-\s*[\d]+)?)/)
-  return match ? `AYAT ${match[1].replace(/\s+/g, ' ')}` : ''
+const emptySongMetadata = (): SongMetadata => ({ label: 'BERNYANYI', title: '', verse: '', reference: '' })
+
+const extractSongMetadata = (line: string): SongMetadata | null => {
+  const match = line.match(SONG_REFERENCE)
+  if (!match) return SONG_MARKER.test(line) ? emptySongMetadata() : null
+  const reference = match[1].toUpperCase() as 'BN' | 'BL'
+  const numberAndVerses = match[2].replace(/\s+/g, ' ').trim()
+  const label = `${reference}${reference === 'BN' ? ' No.' : '.'} ${numberAndVerses}`
+  const verse = numberAndVerses.match(/:\s*(\d+(?:\s*(?:-|,)\s*\d+)*)/)
+  const title = cleanLine(line.replace(SONG_MARKER, '').trim())
+  return { label, title, verse: verse ? `AYAT ${verse[1].replace(/\s+/g, ' ')}` : '', reference }
 }
 
 const isAllCapsHeading = (line: string): boolean => {
@@ -51,15 +56,15 @@ export function parseWorshipText(rawText: string): WorshipDocument {
   const warnings: string[] = []
   const metadata = { title: 'Tata Ibadah', church: '', date: '', topic: '' }
   let mode: 'normal' | 'song' | 'scripture' = 'normal'
-  let currentSong = { label: '', verse: '' }
+  let currentSong = emptySongMetadata()
   let activeScripture = ''
   let activeVerse = ''
 
   const addBlock = (index: number, text: string, classification: SourceBlock['classification']): void => {
     sourceBlocks.push({ index, text, classification })
   }
-  const addSlide = (kind: Slide['kind'], text: string, label = '', secondaryLabel = ''): void => {
-    slides.push({ id: makeId(), kind, text, label, secondaryLabel })
+  const addSlide = (kind: Slide['kind'], text: string, label = '', secondaryLabel = '', songTitle?: string): void => {
+    slides.push({ id: makeId(), kind, text, label, secondaryLabel, songTitle })
   }
   const addScripture = (text: string, verse: string): void => {
     splitReadable(text).forEach((fragment) => addSlide('scripture-line', fragment, activeScripture, verse ? `AYAT ${verse}` : ''))
@@ -84,8 +89,11 @@ export function parseWorshipText(rawText: string): WorshipDocument {
       addSlide('cue', line.replace(/---/g, '').trim())
       return
     }
-    if (SONG_HEADING.test(line)) {
-      currentSong = { label: songLabel(line), verse: verseLabel(line) }
+    const songCandidate = extractSongMetadata(line)
+    const startsSong = songCandidate?.reference === 'BN' || SONG_MARKER.test(line) || (songCandidate?.reference === 'BL' && mode !== 'song')
+    if (startsSong) {
+      // BN is the canonical source whenever both BN and BL information exist in one song block.
+      if (songCandidate?.reference === 'BN' || currentSong.reference !== 'BN') currentSong = songCandidate ?? emptySongMetadata()
       mode = 'song'
       addBlock(index, line, 'song')
       return
@@ -101,13 +109,13 @@ export function parseWorshipText(rawText: string): WorshipDocument {
     }
     if (/^♫♪♫/.test(line) && mode !== 'song') {
       mode = 'song'
-      currentSong = { label: 'BERNYANYI', verse: '' }
+      currentSong = emptySongMetadata()
     }
     if (mode === 'song' && (/^♫♪♫/.test(line) || !SPOKEN.test(line))) {
       const lyric = cleanLine(line.replace(MUSICAL_PREFIX, ''))
       if (lyric && !/^\(.*\)$/.test(lyric)) {
         addBlock(index, line, 'song')
-        splitReadable(lyric, 115).forEach((fragment) => addSlide('song-line', fragment, currentSong.label, currentSong.verse))
+        splitReadable(lyric, 115).forEach((fragment) => addSlide('song-line', fragment, currentSong.label, currentSong.verse, currentSong.title || undefined))
       }
       return
     }

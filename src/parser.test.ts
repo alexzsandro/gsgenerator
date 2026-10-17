@@ -25,4 +25,27 @@ describe('parseWorshipText', () => {
     expect(scripture.every((slide) => slide.text.length <= 150)).toBe(true)
     expect(scripture.every((slide) => slide.secondaryLabel === 'AYAT 10')).toBe(true)
   })
+
+  it('uses the BN header as canonical song metadata instead of a BL parenthetical note', () => {
+    const document = parseWorshipText(`BERNYANYI BN No. 8 : 1 - 3 “YA ALLAH, YA ALLAH”\n(Jahowa, Jahowa) BL.197\n♫♪♫ Ya Allah, Ya Bapa`)
+    const lyric = document.slides.find((slide) => slide.kind === 'song-line')
+    expect(lyric).toMatchObject({
+      label: 'BN No. 8 : 1 - 3',
+      secondaryLabel: 'AYAT 1 - 3',
+      songTitle: 'BN No. 8 : 1 - 3 “YA ALLAH, YA ALLAH”',
+    })
+    expect(lyric?.songTitle).not.toContain('BL.197')
+  })
+
+  it('recognizes a BN header when BERNYANYI is not at the start of the paragraph', () => {
+    const document = parseWorshipText(`BN No. 187 : 2 “ALANGKAH BAIK BIMBINGAN-MU” BERNYANYI\n♫♪♫ Tak mungkin hukum dari manusia`)
+    expect(document.slides.find((slide) => slide.kind === 'song-line')).toMatchObject({
+      label: 'BN No. 187 : 2', songTitle: 'BN No. 187 : 2 “ALANGKAH BAIK BIMBINGAN-MU”',
+    })
+  })
+
+  it('falls back to BL metadata when it is the only song reference', () => {
+    const document = parseWorshipText(`BERNYANYI BL. 197 “JAHOWA”\n♫♪♫ Lirik lagu`)
+    expect(document.slides.find((slide) => slide.kind === 'song-line')).toMatchObject({ label: 'BL. 197', songTitle: 'BL. 197 “JAHOWA”' })
+  })
 })
